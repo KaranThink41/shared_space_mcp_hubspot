@@ -13,16 +13,25 @@ import {
 // Load environment variables from .env file
 dotenv.config();
 
-// Ensure necessary environment variables are set
-if (!process.env.HUBSPOT_ACCESS_TOKEN) {
-  throw new Error("HUBSPOT_ACCESS_TOKEN not found in environment variables");
+// Get environment variables without throwing immediately
+const HUBSPOT_ACCESS_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN || "";
+const SHARED_CONTACT_ID = process.env.SHARED_CONTACT_ID || "";
+
+// Log clear warnings if variables are missing
+if (!HUBSPOT_ACCESS_TOKEN) {
+  console.warn("Warning: HUBSPOT_ACCESS_TOKEN is missing. HubSpot integration features will be disabled.");
 }
-if (!process.env.SHARED_CONTACT_ID) {
-  throw new Error("SHARED_CONTACT_ID not found in environment variables");
+if (!SHARED_CONTACT_ID) {
+  console.warn("Warning: SHARED_CONTACT_ID is missing. HubSpot integration features will be disabled.");
 }
 
-const HUBSPOT_ACCESS_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN;
-const SHARED_CONTACT_ID = process.env.SHARED_CONTACT_ID;
+// Helper function to check required config
+function checkHubSpotConfig() {
+  const missing = [];
+  if (!HUBSPOT_ACCESS_TOKEN) missing.push("HUBSPOT_ACCESS_TOKEN");
+  if (!SHARED_CONTACT_ID) missing.push("SHARED_CONTACT_ID");
+  return missing;
+}
 
 class HubSpotMcpServer {
   private server: Server;
@@ -66,7 +75,7 @@ class HubSpotMcpServer {
       }
     );
 
-    // Initialize HubSpot API client.
+    // Initialize HubSpot API client (even if token is missing, this object is created)
     this.hubspotClient = new HubSpotClient({
       accessToken: HUBSPOT_ACCESS_TOKEN,
     });
@@ -192,6 +201,10 @@ class HubSpotMcpServer {
    * Create a new summary note in HubSpot.
    */
   async handleCreateSharedSummary({ title, summary, author }: { title: string; summary: string; author: string }): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
+    const missing = checkHubSpotConfig();
+    if (missing.length > 0) {
+      return { content: [{ type: "text", text: `Error: Missing required environment variables: ${missing.join(", ")}` }], isError: true };
+    }
     try {
       const noteBody = `Title: ${title}\nSummary: ${summary}\nAuthor: ${author}`;
       const res = await fetch("https://api.hubapi.com/engagements/v1/engagements", {
@@ -221,6 +234,10 @@ class HubSpotMcpServer {
    * Retrieve summary notes from HubSpot using flexible filters.
    */
   async handleGetSummaries({ date, dayOfWeek, limit, timeRange }: { date?: string; dayOfWeek?: string; limit?: number; timeRange?: { start: string; end: string } }): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
+    const missing = checkHubSpotConfig();
+    if (missing.length > 0) {
+      return { content: [{ type: "text", text: `Error: Missing required environment variables: ${missing.join(", ")}` }], isError: true };
+    }
     try {
       const res = await fetch("https://api.hubapi.com/engagements/v1/engagements/paged?limit=100", {
         method: "GET",
@@ -231,14 +248,12 @@ class HubSpotMcpServer {
         throw new Error(`HTTP-Code: ${res.status}\nMessage: ${data.message}`);
       }
       let results = data.results;
-
       if (date) {
         results = results.filter((record: any) => {
           const ts = record.engagement.timestamp;
           return new Date(ts).toISOString().split("T")[0] === date;
         });
       }
-
       if (dayOfWeek) {
         const dayMap: { [key: string]: number } = {
           sunday: 0,
@@ -258,7 +273,6 @@ class HubSpotMcpServer {
           return new Date(ts).getDay() === targetDay;
         });
       }
-
       if (timeRange && timeRange.start && timeRange.end) {
         results = results.filter((record: any) => {
           const ts = record.engagement.timestamp;
@@ -268,13 +282,10 @@ class HubSpotMcpServer {
           return currentTime >= timeRange.start && currentTime <= timeRange.end;
         });
       }
-
       results.sort((a: any, b: any) => b.engagement.timestamp - a.engagement.timestamp);
-
       if (limit && limit > 0) {
         results = results.slice(0, limit);
       }
-
       return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
     } catch (error: any) {
       console.error("Error retrieving summaries:", error);
@@ -284,14 +295,14 @@ class HubSpotMcpServer {
 
   /**
    * Update an existing summary note.
-   * Accepts either an explicit Engagement ID (id) or a search query (query) to find a candidate note.
-   * Merges the current note content with provided updates (title, summary, author).
    */
   async handleUpdateSharedSummary({ id, query, title, summary, author }: { id?: string; query?: string; title?: string; summary?: string; author?: string }): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
+    const missing = checkHubSpotConfig();
+    if (missing.length > 0) {
+      return { content: [{ type: "text", text: `Error: Missing required environment variables: ${missing.join(", ")}` }], isError: true };
+    }
     try {
       let targetId: string | undefined = id;
-
-      // If no explicit ID is provided, use the query to search for a matching note.
       if (!targetId && query) {
         const res = await fetch("https://api.hubapi.com/engagements/v1/engagements/paged?limit=100", {
           method: "GET",
@@ -311,12 +322,9 @@ class HubSpotMcpServer {
         }
         targetId = candidates[0].engagement.id;
       }
-
       if (!targetId) {
         throw new Error("Please provide an Engagement ID or a search query to locate the summary note.");
       }
-
-      // Retrieve the current note.
       const getRes = await fetch(`https://api.hubapi.com/engagements/v1/engagements/${targetId}`, {
         method: "GET",
         headers: { "Authorization": `Bearer ${HUBSPOT_ACCESS_TOKEN}` },
@@ -343,7 +351,6 @@ class HubSpotMcpServer {
       const newSummary = summary || currentSummary;
       const newAuthor = author || currentAuthor;
       const updatedBody = `Title: ${newTitle}\nSummary: ${newSummary}\nAuthor: ${newAuthor}`;
-
       const resUpdate = await fetch(`https://api.hubapi.com/engagements/v1/engagements/${targetId}`, {
         method: "PUT",
         headers: {
@@ -365,13 +372,14 @@ class HubSpotMcpServer {
 
   /**
    * Delete a summary note.
-   * Accepts either an explicit Engagement ID (id) or optional filters (date, dayOfWeek, limit, timeRange)
-   * to locate a candidate note (e.g., "delete my last summary").
    */
   async handleDeleteSharedSummary({ id, date, dayOfWeek, limit, timeRange }: { id?: string; date?: string; dayOfWeek?: string; limit?: number; timeRange?: { start: string; end: string } }): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
+    const missing = checkHubSpotConfig();
+    if (missing.length > 0) {
+      return { content: [{ type: "text", text: `Error: Missing required environment variables: ${missing.join(", ")}` }], isError: true };
+    }
     try {
       let targetId: string | undefined = id;
-
       if (!targetId) {
         const res = await fetch("https://api.hubapi.com/engagements/v1/engagements/paged?limit=100", {
           method: "GET",
@@ -424,7 +432,6 @@ class HubSpotMcpServer {
         }
         targetId = candidate[0].engagement.id;
       }
-
       const resDelete = await fetch(`https://api.hubapi.com/engagements/v1/engagements/${targetId}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${HUBSPOT_ACCESS_TOKEN}` },
