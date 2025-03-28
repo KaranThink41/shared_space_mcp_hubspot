@@ -449,11 +449,14 @@ class HubSpotMcpServer {
 
   /**
    * Start the MCP server using STDIO transport.
+   * Also, ensure STDIN remains open.
    */
   async run() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error("HubSpot MCP server running on STDIO");
+    // Keep STDIN open to avoid immediate EOF in non-interactive environments
+    process.stdin.resume();
   }
 }
 
