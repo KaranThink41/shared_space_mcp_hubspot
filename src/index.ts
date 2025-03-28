@@ -13,11 +13,11 @@ import {
 // Load environment variables from .env file
 dotenv.config();
 
-// Get environment variables without throwing immediately
+// Get HubSpot config from environment
 const HUBSPOT_ACCESS_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN || "";
 const SHARED_CONTACT_ID = process.env.SHARED_CONTACT_ID || "";
 
-// Log clear warnings if variables are missing
+// Log warnings if the required HubSpot variables are missing
 if (!HUBSPOT_ACCESS_TOKEN) {
   console.warn("Warning: HUBSPOT_ACCESS_TOKEN is missing. HubSpot integration features will be disabled.");
 }
@@ -25,7 +25,7 @@ if (!SHARED_CONTACT_ID) {
   console.warn("Warning: SHARED_CONTACT_ID is missing. HubSpot integration features will be disabled.");
 }
 
-// Helper function to check required config
+// Helper function to check required HubSpot configuration
 function checkHubSpotConfig() {
   const missing = [];
   if (!HUBSPOT_ACCESS_TOKEN) missing.push("HUBSPOT_ACCESS_TOKEN");
@@ -453,7 +453,7 @@ class HubSpotMcpServer {
   async run() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error("HubSpot MCP server running on stdio");
+    console.error("HubSpot MCP server running on STDIO");
   }
 }
 
