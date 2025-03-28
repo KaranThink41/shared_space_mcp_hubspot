@@ -449,14 +449,14 @@ class HubSpotMcpServer {
 
   /**
    * Start the MCP server using STDIO transport.
-   * Also, ensure STDIN remains open.
+   * The process is blocked indefinitely by awaiting a never-resolving promise.
    */
   async run() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error("HubSpot MCP server running on STDIO");
-    // Keep STDIN open to avoid immediate EOF in non-interactive environments
-    process.stdin.resume();
+    // Block indefinitely without relying on STDIN by awaiting a never-resolving promise.
+    await new Promise(() => {});
   }
 }
 
