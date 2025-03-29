@@ -5,7 +5,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts"
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node build/index.js"
   },
   "dependencies": {
     "@hubspot/api-client": "^10.2.1",
